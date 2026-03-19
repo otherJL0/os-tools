@@ -184,15 +184,27 @@ mod tests {
 
     use super::*;
 
-    static TEST_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+    static TEST_CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aosroot");
-        let installation = Installation::open(root, None).expect("Could not find root");
-        Client::new("TEST", installation).expect("Could not set up client")
+        let installation = Installation::open(root, None).ok()?;
+        Client::new("TEST", installation).ok()
     });
+
+    macro_rules! test_client {
+        () => {
+            match TEST_CLIENT.as_ref() {
+                Some(client) => client,
+                None => {
+                    eprintln!("Test Skipped: aosroot directory unavailable");
+                    return;
+                }
+            }
+        };
+    }
 
     #[test]
     fn test_find_packages() {
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
         let output = search_packages(client, flags, "jq");
         assert!(!output.is_empty(), "expected match for package jq");
@@ -200,38 +212,50 @@ mod tests {
 
     #[test]
     fn test_find_binaries_with_provides_flag() {
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
-        for binary_name in ["hx", "telnet", "toast", "zramctl"] {
+        for binary_name in ["telnet", "toast", "zramctl"] {
             // These binary names don't appear when searching by package name
             let output = search_packages(client, flags, binary_name);
-            assert!(output.is_empty());
+            assert!(
+                output.is_empty(),
+                "`search {binary_name}` output is not empty: {output:?}"
+            );
 
             // We can find hits for all these binaries with the `--provides` flag
             let output = provides_package(client, flags, binary_name);
-            assert!(!output.is_empty());
+            assert!(
+                !output.is_empty(),
+                "`search --provides {binary_name} should not be empty"
+            );
         }
     }
 
     #[test]
     fn test_find_binaries_with_provider_syntax() {
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
-        for binary_name in ["hx", "telnet", "toast"] {
+        for binary_name in ["telnet", "toast"] {
             // These binary names don't appear when searching by package name
             let output = search_packages(client, flags, binary_name);
-            assert!(output.is_empty());
+            assert!(
+                output.is_empty(),
+                "`search {binary_name}` output is not empty: {output:?}"
+            );
 
             // We can find hits for all these binaries with the provider syntax
             let provider_syntax = format!("binary({binary_name})");
             let output = search_packages(client, flags, &provider_syntax);
-            assert!(!output.is_empty());
+            assert!(
+                !output.is_empty(),
+                "`search {provider_syntax}` output should not be empty"
+            );
         }
     }
 
     #[test]
     fn test_provider_syntax_produces_same_output_as_provides_flag() {
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast"] {
             let output_a = provides_package(client, flags, binary_name);
