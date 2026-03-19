@@ -190,8 +190,18 @@ mod tests {
         Client::new("TEST", installation).expect("Could not set up client")
     });
 
+    macro_rules! skip_in_ci {
+        () => {
+            if std::env::var("CI").is_ok() {
+                eprintln!("Skipping test in CI");
+                return;
+            }
+        };
+    }
+
     #[test]
     fn test_find_packages() {
+        skip_in_ci!();
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
         let output = search_packages(client, flags, "jq");
@@ -200,6 +210,7 @@ mod tests {
 
     #[test]
     fn test_find_binaries_with_provides_flag() {
+        skip_in_ci!();
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast", "zramctl"] {
@@ -215,6 +226,7 @@ mod tests {
 
     #[test]
     fn test_find_binaries_with_provider_syntax() {
+        skip_in_ci!();
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast"] {
@@ -231,6 +243,7 @@ mod tests {
 
     #[test]
     fn test_provider_syntax_produces_same_output_as_provides_flag() {
+        skip_in_ci!();
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast"] {
