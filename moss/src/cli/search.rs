@@ -76,7 +76,11 @@ fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> Vec
     match provider.kind {
         dependency::Kind::PackageName => client
             .search_packages(&provider.name, flags)
-            .map(Output::from)
+            .map(|pkg| Output {
+                name: pkg.meta.name,
+                summary: pkg.meta.summary,
+                search_match: Some(keyword.to_owned()),
+            })
             .collect(),
         _ => client
             .lookup_packages_by_provider(&provider, flags)
@@ -119,21 +123,47 @@ pub enum Error {
 struct Output {
     name: Name,
     summary: String,
+    search_match: Option<String>,
 }
 
+fn highlight_string(content: &str, expression: &str) -> (String, String, String) {
+    if let Some(index) = content.find(expression) {
+        let (prefix, body) = content.split_at(index);
+        let (matched, suffix) = body.split_at(expression.len());
+        (prefix.to_owned(), matched.to_owned(), suffix.to_owned())
+    } else {
+        (content.to_owned(), String::default(), String::default())
+    }
+}
 impl ColumnDisplay for Output {
     fn get_display_width(&self) -> usize {
         self.name.as_str().chars().count()
     }
 
     fn display_column(&self, writer: &mut impl std::io::prelude::Write, _col: tui::pretty::Column, width: usize) {
-        let _ = write!(
-            writer,
-            "{}{:width$}  {}",
-            self.name.as_str().bold(),
-            " ".repeat(width),
-            self.summary
-        );
+        if let Some(expression) = self.search_match.clone() {
+            let (name_prefix, name_matched, name_suffix) = highlight_string(self.name.as_str(), &expression);
+            let (summary_prefix, summary_matched, summary_suffix) = highlight_string(&self.summary, &expression);
+            let _ = write!(
+                writer,
+                " {}{}{}{:width$}  {}{}{}",
+                name_prefix.bold(),
+                name_matched.bold().green(),
+                name_suffix.bold(),
+                " ".repeat(width),
+                summary_prefix.bold(),
+                summary_matched.bold().green(),
+                summary_suffix.bold(),
+            );
+        } else {
+            let _ = write!(
+                writer,
+                " {}{:width$}  {}",
+                self.name.as_str().bold(),
+                " ".repeat(width),
+                self.summary
+            );
+        }
     }
 }
 
@@ -142,6 +172,7 @@ impl From<package::Package> for Output {
         Output {
             name: pkg.meta.name,
             summary: pkg.meta.summary,
+            search_match: None,
         }
     }
 }
