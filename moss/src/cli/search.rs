@@ -43,9 +43,8 @@ pub fn command() -> Command {
                 .long("provides")
                 .num_args(0..=1)
                 .require_equals(true)
-                .default_missing_value("binaries")
+                .default_missing_value("binary")
                 .value_parser([
-                    "binaries",
                     "library",
                     "name",
                     "soname",
@@ -66,6 +65,13 @@ pub fn command() -> Command {
 enum MatchKind {
     Name,
     Summary,
+}
+
+fn map_aliases(value: &str) -> &str {
+    match value {
+        "library" => "soname",
+        _ => value,
+    }
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
