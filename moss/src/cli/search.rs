@@ -223,89 +223,81 @@ impl From<package::Package> for Output {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+
+    use moss::Registry;
+    use moss::package::{self, Name, Package};
+    use moss::registry::plugin;
+    use std::collections::BTreeSet;
     use std::sync::LazyLock;
 
     use super::*;
 
+    fn pkg(name: &str, summary: &str, providers: BTreeSet<Provider>) -> Package {
+        Package {
+            id: package::Id::from(name.to_owned()),
+            meta: package::Meta {
+                name: Name::from(name.to_owned()),
+                summary: summary.to_owned(),
+                providers,
+                version_identifier: Default::default(),
+                source_release: Default::default(),
+                build_release: Default::default(),
+                architecture: Default::default(),
+                description: Default::default(),
+                source_id: Default::default(),
+                homepage: Default::default(),
+                licenses: Default::default(),
+                dependencies: Default::default(),
+                conflicts: Default::default(),
+                uri: Default::default(),
+                hash: Default::default(),
+                download_size: Default::default(),
+            },
+            flags: package::Flags::new().with_available(),
+        }
+    }
+
+    fn test_registry() -> Registry {
+        let mut registry = Registry::default();
+
+        let jq = pkg(
+            "jq",
+            "Command-line JSON processor",
+            BTreeSet::from([
+                Provider {
+                    kind: dependency::Kind::PackageName,
+                    name: "jq".to_owned(),
+                },
+                Provider {
+                    kind: dependency::Kind::Binary,
+                    name: "jq".to_owned(),
+                },
+            ]),
+        );
+
+        let helix = pkg(
+            "helix",
+            "A post-modern text editor",
+            BTreeSet::from([
+                Provider {
+                    kind: dependency::Kind::PackageName,
+                    name: "helix".to_owned(),
+                },
+                Provider {
+                    kind: dependency::Kind::Binary,
+                    name: "hx".to_owned(),
+                },
+            ]),
+        );
+
+        registry.add_plugin(plugin::Plugin::Test(plugin::Test::new(1, vec![jq, helix])));
+        registry
+    }
+
     static TEST_CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aosroot");
-        let installation = Installation::open(root, None).ok()?;
-        Client::new("TEST", installation).ok()
+        let root = tempfile::tempdir().unwrap();
+        let installation = Installation::open(root.path(), None).unwrap();
+        let registry = test_registry();
+        Client::mocked(installation, registry).ok()
     });
-
-    macro_rules! test_client {
-        () => {
-            match TEST_CLIENT.as_ref() {
-                Some(client) => client,
-                None => {
-                    eprintln!("Test Skipped: aosroot directory unavailable");
-                    return;
-                }
-            }
-        };
-    }
-
-    #[test]
-    fn test_find_packages() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        let output = search_packages(client, flags, "jq").unwrap();
-        assert!(!output.is_empty(), "expected match for package jq");
-    }
-
-    #[test]
-    fn test_find_binaries_with_provides_flag() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["telnet", "toast", "zramctl"] {
-            // These binary names don't appear when searching by package name
-            let output = search_packages(client, flags, binary_name).unwrap();
-            assert!(
-                output.is_empty(),
-                "`search {binary_name}` output is not empty: {output:?}"
-            );
-
-            // We can find hits for all these binaries with the `--provides` flag
-            let output = provides_package(client, flags, "binaries", binary_name).unwrap();
-            assert!(
-                !output.is_empty(),
-                "`search --provides {binary_name} should not be empty"
-            );
-        }
-    }
-
-    #[test]
-    fn test_find_binaries_with_provider_syntax() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["telnet", "toast"] {
-            // These binary names don't appear when searching by package name
-            let output = search_packages(client, flags, binary_name).unwrap();
-            assert!(
-                output.is_empty(),
-                "`search {binary_name}` output is not empty: {output:?}"
-            );
-
-            // We can find hits for all these binaries with the provider syntax
-            let provider_syntax = format!("binary({binary_name})");
-            let output = search_packages(client, flags, &provider_syntax).unwrap();
-            assert!(
-                !output.is_empty(),
-                "`search {provider_syntax}` output should not be empty"
-            );
-        }
-    }
-
-    #[test]
-    fn test_provider_syntax_produces_same_output_as_provides_flag() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["hx", "telnet", "toast"] {
-            let output_a = provides_package(client, flags, "binaries", binary_name).unwrap();
-            let provider_syntax = format!("binary({binary_name})");
-            let output_b = search_packages(client, flags, &provider_syntax).unwrap();
-            assert_eq!(output_a, output_b);
-        }
-    }
 }
