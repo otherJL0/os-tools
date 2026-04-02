@@ -141,8 +141,8 @@ impl Client {
     }
 
     /// Perform package installation
-    pub fn install(&mut self, packages: &[&str], yes: bool) -> Result<install::Timing, Error> {
-        install(self, packages, yes).map_err(|error| Error::Install(Box::new(error)))
+    pub fn install(&mut self, packages: &[&str], yes: bool, simulate: bool) -> Result<install::Timing, Error> {
+        install(self, packages, yes, simulate).map_err(|error| Error::Install(Box::new(error)))
     }
 
     /// Perform package removals

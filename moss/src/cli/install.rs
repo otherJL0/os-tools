@@ -25,6 +25,10 @@ pub struct Command {
     /// Packages to install
     packages: Vec<String>,
 
+    /// Simulate the operation (dry-run)
+    #[arg(long)]
+    dry_run: bool,
+
     /// Blit this sync to the provided directory instead of the root
     ///
     /// This operation won't be captured as a new state
@@ -39,6 +43,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let pkgs = command.packages.iter().map(String::as_str).collect::<Vec<_>>();
     let yes = *args.get_one::<bool>("yes").unwrap();
+    let simulate = command.dry_run;
 
     // Grab a client for the root
     let mut client = Client::new(environment::NAME, installation)?;
@@ -48,7 +53,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         client = client.ephemeral(blit_target)?;
     }
 
-    client.install(&pkgs, yes)?;
+    client.install(&pkgs, yes, simulate)?;
 
     Ok(())
 }
