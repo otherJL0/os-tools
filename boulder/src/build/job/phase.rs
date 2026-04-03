@@ -243,6 +243,7 @@ fn prepare_script(upstreams: &[upstream::Upstream]) -> String {
                 rename,
                 strip_dirs,
                 unpack,
+                unpack_dir,
                 ..
             } => {
                 if !unpack {
@@ -250,8 +251,7 @@ fn prepare_script(upstreams: &[upstream::Upstream]) -> String {
                 }
                 let file_name = util::uri_file_name(&upstream.url);
                 let rename = rename.as_deref().unwrap_or(file_name);
-                let unpack_dir = upstream
-                    .unpack_dir
+                let unpack_dir = unpack_dir
                     .as_ref()
                     .map(|dir| dir.display().to_string())
                     .unwrap_or_else(|| rename.to_owned());
@@ -263,10 +263,9 @@ fn prepare_script(upstreams: &[upstream::Upstream]) -> String {
                     r#"bsdtar-static xf "%(sourcedir)/{rename}" -C "{unpack_dir}" --strip-components={strip_dirs} --no-same-owner || (echo "Failed to extract archive"; exit 1);"#,
                 );
             }
-            upstream::Props::Git { .. } => {
+            upstream::Props::Git { clone_dir, .. } => {
                 let source = util::uri_file_name(&upstream.url);
-                let target = upstream
-                    .unpack_dir
+                let target = clone_dir
                     .as_ref()
                     .map(|dir| dir.display().to_string())
                     .unwrap_or_else(|| source.to_owned());
