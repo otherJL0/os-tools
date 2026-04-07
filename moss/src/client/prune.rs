@@ -24,6 +24,7 @@ use tui::{
 };
 
 use crate::client::boot;
+use crate::util;
 use crate::{Client, Installation, State, client::cache, db, package, repository, state};
 
 /// The prune strategy for removing old states
@@ -169,14 +170,12 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -
         |hash| Some(cache::asset_path(installation, &hash)),
     )?;
 
-    // Remove each state's archive folder
-    for state in removals {
-        let archive_path = installation.root_path(state.id.to_string());
+    let archive_paths = removals
+        .iter()
+        .map(|s| installation.root_path(s.id.to_string()))
+        .collect::<Vec<_>>();
 
-        if archive_path.exists() {
-            fs::remove_dir_all(&archive_path)?;
-        }
-    }
+    util::par_remove_dirs_all(archive_paths.iter().map(|p| p.as_path()).collect(), |_, _| {})?;
 
     // Sync boot to ensure pruned states are removed from boot entries
     boot::synchronize(client, &current_state).map_err(Error::SyncBoot)?;
