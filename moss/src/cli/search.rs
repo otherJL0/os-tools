@@ -74,19 +74,23 @@ fn map_aliases(value: &str) -> &str {
     }
 }
 
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
-    let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provider_kind = args
+    let kind = args
         .get_one::<String>(FLAG_PROVIDES)
         .map(|s| map_aliases(s))
         .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
-    let provider = Provider::from_name(keyword)
+    Provider::from_name(keyword)
         .map_err(|_| Error::ParseError(keyword.to_owned()))
         .map(|provider| Provider {
-            kind: provider_kind.unwrap_or(provider.kind),
+            kind: kind.unwrap_or(provider.kind),
             ..provider
-        })?;
+        })
+}
+
+pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let only_installed = args.get_flag(FLAG_INSTALLED);
+    let provider = determine_provider(args)?;
 
     let client = Client::new(environment::NAME, installation)?;
     let flags = if only_installed {
@@ -98,8 +102,8 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let mut output = match provider {
         Provider {
             kind: dependency::Kind::PackageName,
-            name: _name,
-        } => search_packages(&client, flags, keyword),
+            name,
+        } => search_packages(&client, flags, &name),
         Provider {
             kind: _kind,
             name: ref _name,
