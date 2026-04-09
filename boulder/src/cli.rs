@@ -13,6 +13,7 @@ use fs_err::{self as fs, File};
 use thiserror::Error;
 
 mod build;
+mod cache;
 mod chroot;
 mod profile;
 mod recipe;
@@ -55,6 +56,7 @@ pub struct Global {
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
     Build(build::Command),
+    Cache(cache::Command),
     Chroot(chroot::Command),
     Profile(profile::Command),
     Recipe(recipe::Command),
@@ -120,6 +122,7 @@ pub fn process() -> Result<(), Error> {
 
     match subcommand {
         Some(Subcommand::Build(command)) => build::handle(command, env)?,
+        Some(Subcommand::Cache(command)) => cache::handle(command, env)?,
         Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
         Some(Subcommand::Profile(command)) => profile::handle(command, env)?,
         Some(Subcommand::Recipe(command)) => recipe::handle(command, env)?,
@@ -165,6 +168,8 @@ fn replace_aliases(args: std::env::Args) -> Vec<String> {
 pub enum Error {
     #[error("build")]
     Build(#[source] Box<build::Error>),
+    #[error("cache")]
+    Cache(#[from] cache::Error),
     #[error("chroot")]
     Chroot(#[from] chroot::Error),
     #[error("profile")]
