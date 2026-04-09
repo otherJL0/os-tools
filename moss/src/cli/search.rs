@@ -74,19 +74,35 @@ fn map_aliases(value: &str) -> &str {
     }
 }
 
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
-    let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provider_kind = args
+    let provides_flag = args
         .get_one::<String>(FLAG_PROVIDES)
         .map(|s| map_aliases(s))
         .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
-    let provider = Provider::from_name(keyword)
-        .map_err(|_| Error::ParseError(keyword.to_owned()))
-        .map(|provider| Provider {
-            kind: provider_kind.unwrap_or(provider.kind),
-            ..provider
-        })?;
+    if let Some(kind) = provides_flag {
+        Ok(Provider {
+            kind,
+            name: keyword.to_owned(),
+        })
+    } else {
+        Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))
+    }
+}
+
+fn query_packages(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
+    match provider {
+        Provider {
+            kind: dependency::Kind::PackageName,
+            name,
+        } => search_packages(client, flags, &name),
+        _ => search_by_provider(client, flags, provider),
+    }
+}
+
+pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let only_installed = args.get_flag(FLAG_INSTALLED);
+    let provider = determine_provider(args)?;
 
     let client = Client::new(environment::NAME, installation)?;
     let flags = if only_installed {
@@ -95,18 +111,9 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let mut output = match provider {
-        Provider {
-            kind: dependency::Kind::PackageName,
-            name: _name,
-        } => search_packages(&client, flags, keyword),
-        Provider {
-            kind: _kind,
-            name: ref _name,
-        } => provides_package(&client, flags, provider),
-    }?;
+    let mut output = query_packages(&client, flags, provider);
 
-    if output.values().all(|pkgs| pkgs.is_empty()) {
+    if output.values().all(Vec::is_empty) {
         return Ok(());
     }
 
@@ -119,38 +126,29 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     Ok(())
 }
 
-fn search_packages(
-    client: &Client,
-    flags: package::Flags,
-    keyword: &str,
-) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
-    let mut output_kind: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
+fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTreeMap<MatchKind, Vec<Output>> {
+    let mut results: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
 
+    let keyword_lowercase = keyword.to_ascii_lowercase();
     for pkg in client.search_packages(keyword, flags) {
         let pkg_name_lowercase = pkg.meta.name.as_str().to_ascii_lowercase();
-        let match_kind = if pkg_name_lowercase.contains(&keyword.to_ascii_lowercase()) {
+        let match_kind = if pkg_name_lowercase.contains(&keyword_lowercase) {
             MatchKind::Name
         } else {
             MatchKind::Summary
         };
-        output_kind.entry(match_kind).or_default().push(Output {
+        results.entry(match_kind).or_default().push(Output {
             name: pkg.meta.name,
             summary: pkg.meta.summary,
             search_match: Some(keyword.to_owned()),
         });
     }
-    Ok(output_kind)
+    results
 }
 
-fn provides_package(
-    client: &Client,
-    flags: package::Flags,
-    provider: Provider,
-) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
-    let mut result: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
+fn search_by_provider(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
     let packages = client.lookup_packages_by_provider(&provider, flags);
-    result.insert(MatchKind::Name, packages.into_iter().map(Output::from).collect());
-    Ok(result)
+    BTreeMap::from([(MatchKind::Name, packages.into_iter().map(Output::from).collect())])
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -232,7 +230,9 @@ mod tests {
 
     use super::*;
 
-    fn pkg(name: &str, summary: &str, providers: BTreeSet<Provider>) -> Package {
+    fn pkg(name: &str, summary: &str, providers: &[Provider]) -> Package {
+        let mut providers: BTreeSet<Provider> = providers.iter().cloned().collect();
+        providers.insert(provider(dependency::Kind::PackageName, name));
         Package {
             id: package::Id::from(name.to_owned()),
             meta: package::Meta {
@@ -269,58 +269,35 @@ mod tests {
     /// and manifest.x86_64.jsonc files in the recipes repository.
     fn test_registry() -> Registry {
         let mut registry = Registry::default();
-        let package_name = dependency::Kind::PackageName;
         let binary = dependency::Kind::Binary;
+        let soname = dependency::Kind::SharedLibrary;
+        let pkgconfig = dependency::Kind::PkgConfig;
 
         let packages = vec![
-            pkg(
-                "git",
-                "Fast, scalable, distributed revision control system",
-                BTreeSet::from([provider(package_name, "git"), provider(binary, "git")]),
-            ),
-            pkg(
-                "jq",
-                "Command-line JSON processor",
-                BTreeSet::from([provider(package_name, "jq"), provider(binary, "jq")]),
-            ),
-            pkg(
-                "ripgrep",
-                "Recursive text search utility",
-                BTreeSet::from([provider(package_name, "ripgrep"), provider(binary, "rg")]),
-            ),
-            pkg(
-                "fd",
-                "A simple, fast and user-friendly alternative to find",
-                BTreeSet::from([provider(package_name, "fd"), provider(binary, "fd")]),
-            ),
+            pkg("jq", "Command-line JSON processor", &[provider(binary, "jq")]),
+            pkg("ripgrep", "Recursive text search utility", &[provider(binary, "rg")]),
             pkg(
                 "nano",
                 "GNU Text Editor",
-                BTreeSet::from([
-                    provider(package_name, "nano"),
-                    provider(binary, "nano"),
-                    provider(binary, "rnano"),
-                ]),
+                &[provider(binary, "nano"), provider(binary, "rnano")],
             ),
-            pkg(
-                "helix",
-                "A post-modern text editor",
-                BTreeSet::from([provider(package_name, "helix"), provider(binary, "hx")]),
-            ),
-            pkg(
-                "bash",
-                "GNU Bourne-Again Shell",
-                BTreeSet::from([provider(package_name, "bash"), provider(binary, "bash")]),
-            ),
+            pkg("helix", "A post-modern text editor", &[provider(binary, "hx")]),
+            pkg("bash", "GNU Bourne-Again Shell", &[provider(binary, "bash")]),
             pkg(
                 "zsh",
                 "Extensible shell designed for interactive use",
-                BTreeSet::from([provider(package_name, "zsh"), provider(binary, "zsh")]),
+                &[provider(binary, "zsh")],
+            ),
+            pkg("fish", "The friendly interactive shell", &[provider(binary, "fish")]),
+            pkg(
+                "libyaml",
+                "YAML 1.1 library",
+                &[provider(soname, "libyaml-0.so.2(x86_64)")],
             ),
             pkg(
-                "fish",
-                "The friendly interactive shell",
-                BTreeSet::from([provider(package_name, "fish"), provider(binary, "fish")]),
+                "libyaml-devel",
+                "Development files for libyaml",
+                &[provider(pkgconfig, "yaml-0.1")],
             ),
         ];
 
@@ -350,23 +327,19 @@ mod tests {
     }
 
     fn collect_result_names(results: &BTreeMap<MatchKind, Vec<Output>>) -> Vec<String> {
-        results
+        let mut names: Vec<String> = results
             .values()
             .flat_map(|outputs| outputs.iter().map(|output| output.name.as_str().to_owned()))
-            .collect()
-    }
-
-    fn names_for(results: &BTreeMap<MatchKind, Vec<Output>>, kind: &MatchKind) -> Vec<String> {
-        results
-            .get(kind)
-            .map(|outputs| outputs.iter().map(|o| o.name.as_str().to_owned()).collect())
-            .unwrap_or_default()
+            .collect();
+        names.sort();
+        names
     }
 
     fn moss(args: &str) -> ArgMatches {
         command().get_matches_from(args.split_whitespace())
     }
 
+    /// Test helper function that approximates the behavior of `handle()`
     fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
         let args = moss(query);
         let provider = determine_provider(&args).unwrap();
@@ -465,5 +438,29 @@ mod tests {
 
         assert_eq!(names_provides_flag, names_dependency_syntax);
         assert_eq!(names_provides_flag, vec!["jq"]);
+    }
+
+    #[test]
+    fn test_provider_soname_finds_libyaml() {
+        let output_provides_flag = test_handle("search --provides=soname libyaml-0.so.2(x86_64)");
+        let output_dependency_syntax = test_handle("search soname(libyaml-0.so.2(x86_64))");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["libyaml"]);
+    }
+
+    #[test]
+    fn test_provider_pkgconfig_finds_libyaml_devel() {
+        let output_provides_flag = test_handle("search --provides=pkgconfig yaml-0.1");
+        let output_dependency_syntax = test_handle("search pkgconfig(yaml-0.1)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["libyaml-devel"]);
     }
 }
