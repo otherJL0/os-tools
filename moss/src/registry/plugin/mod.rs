@@ -15,7 +15,7 @@ use crate::registry::package::{self, Package};
 pub use self::active::Active;
 pub use self::cobble::Cobble;
 pub use self::repository::Repository;
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub use self::test::Test;
 
 mod active;
@@ -31,7 +31,7 @@ pub enum Plugin {
     Cobble(Cobble),
     Repository(Repository),
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     Test(Test),
 }
 
@@ -44,7 +44,7 @@ impl Plugin {
             Plugin::Cobble(plugin) => plugin.package(id),
             Plugin::Repository(plugin) => plugin.package(id),
 
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             Plugin::Test(plugin) => plugin.package(id),
         }
     }
@@ -56,7 +56,7 @@ impl Plugin {
             Plugin::Cobble(plugin) => plugin.list(flags),
             Plugin::Repository(plugin) => plugin.list(flags),
 
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             Plugin::Test(plugin) => plugin.list(flags),
         })
     }
@@ -67,7 +67,7 @@ impl Plugin {
             Plugin::Cobble(plugin) => plugin.query_keyword(keyword, flags),
             Plugin::Repository(plugin) => plugin.query_keyword(keyword, flags),
 
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             Plugin::Test(plugin) => plugin.query_keyword(keyword, flags),
         })
     }
@@ -79,7 +79,7 @@ impl Plugin {
             Plugin::Cobble(plugin) => plugin.query_provider(provider, flags),
             Plugin::Repository(plugin) => plugin.query_provider(provider, flags),
 
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             Plugin::Test(plugin) => plugin.query_provider(provider, flags),
         })
     }
@@ -98,7 +98,7 @@ impl Plugin {
                 .collect(),
             Plugin::Repository(plugin) => plugin.query_provider_id_only(provider, flags),
 
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             Plugin::Test(plugin) => plugin.query_provider_id_only(provider, flags),
         })
     }
@@ -110,7 +110,7 @@ impl Plugin {
             Plugin::Cobble(plugin) => plugin.query_name(package_name, flags),
             Plugin::Repository(plugin) => plugin.query_name(package_name, flags),
 
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             Plugin::Test(plugin) => plugin.query_name(package_name, flags),
         })
     }
@@ -124,13 +124,13 @@ impl Plugin {
             Plugin::Cobble(plugin) => plugin.priority(),
             Plugin::Repository(plugin) => plugin.priority(),
 
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             Plugin::Test(plugin) => plugin.priority,
         }
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub mod test {
     use super::*;
 

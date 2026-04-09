@@ -7,6 +7,9 @@ edition.workspace = true
 version.workspace = true
 rust-version.workspace = true
 
+[features]
+testing = []
+
 [dependencies]
 config = { path = "../crates/config" }
 container = { path = "../crates/container" }
