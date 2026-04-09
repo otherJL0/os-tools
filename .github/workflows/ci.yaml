@@ -59,7 +59,7 @@ jobs:
         run: cargo build
 
       - name: Test project
-        run: cargo test --all
+        run: cargo test --all --features moss/testing
 
       - name: Run clippy
         uses: giraffate/clippy-action@v1

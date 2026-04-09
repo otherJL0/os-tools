@@ -223,89 +223,247 @@ impl From<package::Package> for Output {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+
+    use moss::Registry;
+    use moss::package::{self, Name, Package};
+    use moss::registry::plugin;
+    use std::collections::BTreeSet;
     use std::sync::LazyLock;
 
     use super::*;
 
-    static TEST_CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aosroot");
-        let installation = Installation::open(root, None).ok()?;
-        Client::new("TEST", installation).ok()
+    fn pkg(name: &str, summary: &str, providers: BTreeSet<Provider>) -> Package {
+        Package {
+            id: package::Id::from(name.to_owned()),
+            meta: package::Meta {
+                name: Name::from(name.to_owned()),
+                summary: summary.to_owned(),
+                providers,
+                version_identifier: Default::default(),
+                source_release: Default::default(),
+                build_release: Default::default(),
+                architecture: Default::default(),
+                description: Default::default(),
+                source_id: Default::default(),
+                homepage: Default::default(),
+                licenses: Default::default(),
+                dependencies: Default::default(),
+                conflicts: Default::default(),
+                uri: Default::default(),
+                hash: Default::default(),
+                download_size: Default::default(),
+            },
+            flags: package::Flags::new().with_available(),
+        }
+    }
+
+    fn provider(kind: dependency::Kind, name: &str) -> Provider {
+        Provider {
+            kind,
+            name: name.to_owned(),
+        }
+    }
+
+    /// Build a test registry populated with real packages from the AerynOS recipes.
+    /// Package names, summaries, and provider metadata are sourced from stone.yaml
+    /// and manifest.x86_64.jsonc files in the recipes repository.
+    fn test_registry() -> Registry {
+        let mut registry = Registry::default();
+        let package_name = dependency::Kind::PackageName;
+        let binary = dependency::Kind::Binary;
+
+        let packages = vec![
+            pkg(
+                "git",
+                "Fast, scalable, distributed revision control system",
+                BTreeSet::from([provider(package_name, "git"), provider(binary, "git")]),
+            ),
+            pkg(
+                "jq",
+                "Command-line JSON processor",
+                BTreeSet::from([provider(package_name, "jq"), provider(binary, "jq")]),
+            ),
+            pkg(
+                "ripgrep",
+                "Recursive text search utility",
+                BTreeSet::from([provider(package_name, "ripgrep"), provider(binary, "rg")]),
+            ),
+            pkg(
+                "fd",
+                "A simple, fast and user-friendly alternative to find",
+                BTreeSet::from([provider(package_name, "fd"), provider(binary, "fd")]),
+            ),
+            pkg(
+                "nano",
+                "GNU Text Editor",
+                BTreeSet::from([
+                    provider(package_name, "nano"),
+                    provider(binary, "nano"),
+                    provider(binary, "rnano"),
+                ]),
+            ),
+            pkg(
+                "helix",
+                "A post-modern text editor",
+                BTreeSet::from([provider(package_name, "helix"), provider(binary, "hx")]),
+            ),
+            pkg(
+                "bash",
+                "GNU Bourne-Again Shell",
+                BTreeSet::from([provider(package_name, "bash"), provider(binary, "bash")]),
+            ),
+            pkg(
+                "zsh",
+                "Extensible shell designed for interactive use",
+                BTreeSet::from([provider(package_name, "zsh"), provider(binary, "zsh")]),
+            ),
+            pkg(
+                "fish",
+                "The friendly interactive shell",
+                BTreeSet::from([provider(package_name, "fish"), provider(binary, "fish")]),
+            ),
+        ];
+
+        registry.add_plugin(plugin::Plugin::Test(plugin::Test::new(1, packages)));
+        registry
+    }
+
+    struct TestFixture {
+        _root: tempfile::TempDir,
+        client: Client,
+    }
+
+    static TEST_FIXTURE: LazyLock<TestFixture> = LazyLock::new(|| {
+        let root = tempfile::tempdir().unwrap();
+        let installation = Installation::open(root.path(), None).unwrap();
+        let registry = test_registry();
+        let client = Client::mocked(installation, registry).unwrap();
+        TestFixture { _root: root, client }
     });
 
-    macro_rules! test_client {
-        () => {
-            match TEST_CLIENT.as_ref() {
-                Some(client) => client,
-                None => {
-                    eprintln!("Test Skipped: aosroot directory unavailable");
-                    return;
-                }
-            }
-        };
+    fn client() -> &'static Client {
+        &TEST_FIXTURE.client
+    }
+
+    fn flags_available() -> package::Flags {
+        package::Flags::default().with_available()
+    }
+
+    fn collect_result_names(results: &BTreeMap<MatchKind, Vec<Output>>) -> Vec<String> {
+        results
+            .values()
+            .flat_map(|outputs| outputs.iter().map(|output| output.name.as_str().to_owned()))
+            .collect()
+    }
+
+    fn names_for(results: &BTreeMap<MatchKind, Vec<Output>>, kind: &MatchKind) -> Vec<String> {
+        results
+            .get(kind)
+            .map(|outputs| outputs.iter().map(|o| o.name.as_str().to_owned()).collect())
+            .unwrap_or_default()
+    }
+
+    fn moss(args: &str) -> ArgMatches {
+        command().get_matches_from(args.split_whitespace())
+    }
+
+    fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
+        let args = moss(query);
+        let provider = determine_provider(&args).unwrap();
+        query_packages(client(), flags_available(), provider)
     }
 
     #[test]
-    fn test_find_packages() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        let output = search_packages(client, flags, "jq").unwrap();
-        assert!(!output.is_empty(), "expected match for package jq");
+    fn test_keyword_exact_name() {
+        let output = test_handle("search jq");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["jq"]);
     }
 
     #[test]
-    fn test_find_binaries_with_provides_flag() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["telnet", "toast", "zramctl"] {
-            // These binary names don't appear when searching by package name
-            let output = search_packages(client, flags, binary_name).unwrap();
-            assert!(
-                output.is_empty(),
-                "`search {binary_name}` output is not empty: {output:?}"
-            );
-
-            // We can find hits for all these binaries with the `--provides` flag
-            let output = provides_package(client, flags, "binaries", binary_name).unwrap();
-            assert!(
-                !output.is_empty(),
-                "`search --provides {binary_name} should not be empty"
-            );
+    fn test_keyword_shell_matches_case_insensitively() {
+        // Keyword search is case-insensitive so all three casings return the same results
+        for keyword in ["shell", "Shell", "SHELL"] {
+            let output = test_handle(&format!("search {keyword}"));
+            let names = collect_result_names(&output);
+            assert_eq!(names, vec!["bash", "fish", "zsh"]);
         }
     }
 
     #[test]
-    fn test_find_binaries_with_provider_syntax() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["telnet", "toast"] {
-            // These binary names don't appear when searching by package name
-            let output = search_packages(client, flags, binary_name).unwrap();
-            assert!(
-                output.is_empty(),
-                "`search {binary_name}` output is not empty: {output:?}"
-            );
+    fn test_keyword_summary_match() {
+        // "json" appears in jq's summary but not its name
+        let output = test_handle("search json");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["jq"]);
+    }
 
-            // We can find hits for all these binaries with the provider syntax
-            let provider_syntax = format!("binary({binary_name})");
-            let output = search_packages(client, flags, &provider_syntax).unwrap();
-            assert!(
-                !output.is_empty(),
-                "`search {provider_syntax}` output should not be empty"
-            );
+    #[test]
+    fn test_keyword_text_matches_multiple() {
+        // "text" matches:
+        //   helix ("text editor")
+        //   nano ("GNU Text Editor")
+        //   ripgrep ("text search")
+        let output = test_handle("search text");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["helix", "nano", "ripgrep"]);
+    }
+
+    /// TODO: `moss search` could eventually provide results on binary names by default
+    #[test]
+    fn test_keyword_binary_name_returns_nothing() {
+        for query in ["search hx", "search rg"] {
+            let output = test_handle(query);
+            assert!(output.values().all(Vec::is_empty));
         }
     }
 
     #[test]
-    fn test_provider_syntax_produces_same_output_as_provides_flag() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["hx", "telnet", "toast"] {
-            let output_a = provides_package(client, flags, "binaries", binary_name).unwrap();
-            let provider_syntax = format!("binary({binary_name})");
-            let output_b = search_packages(client, flags, &provider_syntax).unwrap();
-            assert_eq!(output_a, output_b);
-        }
+    fn test_keyword_nonexistent_returns_nothing() {
+        let output = test_handle("search no-such-package");
+        assert!(output.values().all(Vec::is_empty));
+    }
+
+    #[test]
+    fn test_keyword_uppercase_matches_case_insensitively() {
+        let output = test_handle("search NANO");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["nano"]);
+    }
+
+    #[test]
+    fn test_provider_binary_hx_finds_helix() {
+        let output_provides_flag = test_handle("search --provides=binary hx");
+        let output_dependency_syntax = test_handle("search binary(hx)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["helix"]);
+    }
+
+    #[test]
+    fn test_provider_binary_rg_finds_ripgrep() {
+        let output_provides_flag = test_handle("search --provides=binary rg");
+        let output_dependency_syntax = test_handle("search binary(rg)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["ripgrep"]);
+    }
+
+    #[test]
+    fn test_provider_binary_jq_finds_jq() {
+        let output_provides_flag = test_handle("search --provides=binary jq");
+        let output_dependency_syntax = test_handle("search binary(jq)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["jq"]);
     }
 }
