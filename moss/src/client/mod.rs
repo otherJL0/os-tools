@@ -881,6 +881,27 @@ impl Client {
     pub fn list_layouts(&self) -> Result<Vec<(package::Id, StonePayloadLayoutRecord)>, Error> {
         self.layout_db.all().map_err(Error::Db)
     }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn mocked(installation: Installation, registry: Registry) -> Result<Client, Error> {
+        let config = config::Manager::system(&installation.root, "moss");
+        let install_db = db::meta::Database::new(":memory:")?;
+        let state_db = db::state::Database::new(":memory:")?;
+        let layout_db = db::layout::Database::new(":memory:")?;
+
+        let repositories = repository::Manager::system(config.clone(), installation.clone())?;
+
+        Ok(Client {
+            config,
+            installation,
+            repositories,
+            registry,
+            install_db,
+            state_db,
+            layout_db,
+            scope: Scope::Stateful,
+        })
+    }
 }
 
 /// Add root symlinks & os-release file
