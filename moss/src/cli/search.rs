@@ -304,4 +304,35 @@ mod tests {
         let registry = test_registry();
         Client::mocked(installation, registry).ok()
     });
+
+    #[test]
+    fn test_search() {
+        for pkg in ["jq", "hx"] {
+            let args = command().try_get_matches_from(["search", pkg]).unwrap();
+            let provider = determine_provider(&args).unwrap();
+            assert_eq!(provider.kind, dependency::Kind::PackageName);
+        }
+    }
+
+    #[test]
+    fn test_search_with_kind() {
+        for pkg in ["jq", "hx"] {
+            let args = command()
+                .try_get_matches_from(["search", "--provides=binary", pkg])
+                .unwrap();
+            let provider = determine_provider(&args).unwrap();
+            assert_eq!(provider.kind, dependency::Kind::Binary);
+        }
+    }
+
+    #[test]
+    fn test_search_with_provider_syntax() {
+        for pkg in ["jq", "hx"] {
+            let args = command()
+                .try_get_matches_from(["search", format!("binary({pkg})").as_str()])
+                .unwrap();
+            let provider = determine_provider(&args).unwrap();
+            assert_eq!(provider.kind, dependency::Kind::Binary);
+        }
+    }
 }
