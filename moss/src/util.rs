@@ -13,7 +13,7 @@ use std::{
 
 use fs_err as fs;
 use nix::unistd::{LinkatFlags, linkat};
-use rayon::iter::{ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use sha2::{Digest, Sha256};
 use stone::{StoneDecodedPayload, StoneReadError};
 use tokio::io::AsyncRead;
@@ -198,6 +198,39 @@ pub fn par_remove_dir_all(path: &Path) -> io::Result<()> {
         } else {
             par_remove_dir_all_recursive(path)
         }
+    })?;
+    Ok(())
+}
+
+/// Removes a set of directories provided, after removing all of their contents in parallel. Use carefully!
+///
+/// Ignores `NotFound` error if any of the root paths do not exist.
+///
+/// Provides a callback tuple of `Path` and `io::Result` once each element in paths is completed with it's
+/// result
+pub fn par_remove_dirs_all<P>(paths: Vec<&Path>, progress: P) -> io::Result<()>
+where
+    P: Fn(&Path, &io::Result<()>) + Sync,
+{
+    let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
+
+    rayon_runtime.install(|| -> io::Result<()> {
+        paths.par_iter().try_for_each(|path| -> io::Result<()> {
+            let result: io::Result<()> = (|| {
+                let filetype = match fs::symlink_metadata(path) {
+                    Ok(metadata) => metadata.file_type(),
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+                    Err(e) => return Err(e),
+                };
+                if filetype.is_symlink() {
+                    fs::remove_file(path)
+                } else {
+                    par_remove_dir_all_recursive(path)
+                }
+            })();
+            progress(path, &result);
+            result
+        })
     })?;
     Ok(())
 }
