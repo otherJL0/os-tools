@@ -76,16 +76,18 @@ fn map_aliases(value: &str) -> &str {
 
 fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
-    let kind = args
+    let provides_flag = args
         .get_one::<String>(FLAG_PROVIDES)
         .map(|s| map_aliases(s))
         .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
-    Provider::from_name(keyword)
-        .map_err(|_| Error::ParseError(keyword.to_owned()))
-        .map(|provider| Provider {
-            kind: kind.unwrap_or(provider.kind),
-            ..provider
+    if let Some(kind) = provides_flag {
+        Ok(Provider {
+            kind,
+            name: keyword.to_owned(),
         })
+    } else {
+        Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))
+    }
 }
 
 fn query_packages(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
@@ -436,5 +438,29 @@ mod tests {
 
         assert_eq!(names_provides_flag, names_dependency_syntax);
         assert_eq!(names_provides_flag, vec!["jq"]);
+    }
+
+    #[test]
+    fn test_provider_soname_finds_libyaml() {
+        let output_provides_flag = test_handle("search --provides=soname libyaml-0.so.2(x86_64)");
+        let output_dependency_syntax = test_handle("search soname(libyaml-0.so.2(x86_64))");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["libyaml"]);
+    }
+
+    #[test]
+    fn test_provider_pkgconfig_finds_libyaml_devel() {
+        let output_provides_flag = test_handle("search --provides=pkgconfig yaml-0.1");
+        let output_dependency_syntax = test_handle("search pkgconfig(yaml-0.1)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["libyaml-devel"]);
     }
 }
