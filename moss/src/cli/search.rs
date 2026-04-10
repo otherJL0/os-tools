@@ -111,7 +111,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let mut output = query_packages(&client, flags, provider);
 
-    if output.values().all(|pkgs| pkgs.is_empty()) {
+    if output.values().all(Vec::is_empty) {
         return Ok(());
     }
 
@@ -270,11 +270,6 @@ mod tests {
 
         let packages = vec![
             pkg(
-                "git",
-                "Fast, scalable, distributed revision control system",
-                BTreeSet::from([provider(package_name, "git"), provider(binary, "git")]),
-            ),
-            pkg(
                 "jq",
                 "Command-line JSON processor",
                 BTreeSet::from([provider(package_name, "jq"), provider(binary, "jq")]),
@@ -283,11 +278,6 @@ mod tests {
                 "ripgrep",
                 "Recursive text search utility",
                 BTreeSet::from([provider(package_name, "ripgrep"), provider(binary, "rg")]),
-            ),
-            pkg(
-                "fd",
-                "A simple, fast and user-friendly alternative to find",
-                BTreeSet::from([provider(package_name, "fd"), provider(binary, "fd")]),
             ),
             pkg(
                 "nano",
@@ -346,23 +336,19 @@ mod tests {
     }
 
     fn collect_result_names(results: &BTreeMap<MatchKind, Vec<Output>>) -> Vec<String> {
-        results
+        let mut names: Vec<String> = results
             .values()
             .flat_map(|outputs| outputs.iter().map(|output| output.name.as_str().to_owned()))
-            .collect()
-    }
-
-    fn names_for(results: &BTreeMap<MatchKind, Vec<Output>>, kind: &MatchKind) -> Vec<String> {
-        results
-            .get(kind)
-            .map(|outputs| outputs.iter().map(|o| o.name.as_str().to_owned()).collect())
-            .unwrap_or_default()
+            .collect();
+        names.sort();
+        names
     }
 
     fn moss(args: &str) -> ArgMatches {
         command().get_matches_from(args.split_whitespace())
     }
 
+    /// Test helper function that approximates the behavior of `handle()`
     fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
         let args = moss(query);
         let provider = determine_provider(&args).unwrap();
