@@ -228,7 +228,9 @@ mod tests {
 
     use super::*;
 
-    fn pkg(name: &str, summary: &str, providers: BTreeSet<Provider>) -> Package {
+    fn pkg(name: &str, summary: &str, providers: &[Provider]) -> Package {
+        let mut providers: BTreeSet<Provider> = providers.iter().cloned().collect();
+        providers.insert(provider(dependency::Kind::PackageName, name));
         Package {
             id: package::Id::from(name.to_owned()),
             meta: package::Meta {
@@ -265,48 +267,35 @@ mod tests {
     /// and manifest.x86_64.jsonc files in the recipes repository.
     fn test_registry() -> Registry {
         let mut registry = Registry::default();
-        let package_name = dependency::Kind::PackageName;
         let binary = dependency::Kind::Binary;
+        let soname = dependency::Kind::SharedLibrary;
+        let pkgconfig = dependency::Kind::PkgConfig;
 
         let packages = vec![
-            pkg(
-                "jq",
-                "Command-line JSON processor",
-                BTreeSet::from([provider(package_name, "jq"), provider(binary, "jq")]),
-            ),
-            pkg(
-                "ripgrep",
-                "Recursive text search utility",
-                BTreeSet::from([provider(package_name, "ripgrep"), provider(binary, "rg")]),
-            ),
+            pkg("jq", "Command-line JSON processor", &[provider(binary, "jq")]),
+            pkg("ripgrep", "Recursive text search utility", &[provider(binary, "rg")]),
             pkg(
                 "nano",
                 "GNU Text Editor",
-                BTreeSet::from([
-                    provider(package_name, "nano"),
-                    provider(binary, "nano"),
-                    provider(binary, "rnano"),
-                ]),
+                &[provider(binary, "nano"), provider(binary, "rnano")],
             ),
-            pkg(
-                "helix",
-                "A post-modern text editor",
-                BTreeSet::from([provider(package_name, "helix"), provider(binary, "hx")]),
-            ),
-            pkg(
-                "bash",
-                "GNU Bourne-Again Shell",
-                BTreeSet::from([provider(package_name, "bash"), provider(binary, "bash")]),
-            ),
+            pkg("helix", "A post-modern text editor", &[provider(binary, "hx")]),
+            pkg("bash", "GNU Bourne-Again Shell", &[provider(binary, "bash")]),
             pkg(
                 "zsh",
                 "Extensible shell designed for interactive use",
-                BTreeSet::from([provider(package_name, "zsh"), provider(binary, "zsh")]),
+                &[provider(binary, "zsh")],
+            ),
+            pkg("fish", "The friendly interactive shell", &[provider(binary, "fish")]),
+            pkg(
+                "libyaml",
+                "YAML 1.1 library",
+                &[provider(soname, "libyaml-0.so.2(x86_64)")],
             ),
             pkg(
-                "fish",
-                "The friendly interactive shell",
-                BTreeSet::from([provider(package_name, "fish"), provider(binary, "fish")]),
+                "libyaml-devel",
+                "Development files for libyaml",
+                &[provider(pkgconfig, "yaml-0.1")],
             ),
         ];
 
