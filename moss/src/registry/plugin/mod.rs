@@ -158,9 +158,13 @@ pub mod test {
         }
 
         pub fn query_keyword(&self, keyword: &str, _flags: package::Flags) -> Vec<Package> {
+            let keyword_lower = keyword.to_ascii_lowercase();
             self.packages
                 .iter()
-                .filter(|pkg| pkg.meta.name.contains(keyword) || pkg.meta.summary.contains(keyword))
+                .filter(|pkg| {
+                    pkg.meta.name.as_str().to_ascii_lowercase().contains(&keyword_lower)
+                        || pkg.meta.summary.to_ascii_lowercase().contains(&keyword_lower)
+                })
                 .cloned()
                 .collect()
         }
