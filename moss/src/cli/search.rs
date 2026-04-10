@@ -356,29 +356,96 @@ mod tests {
     }
 
     #[test]
-    fn test_search() {
-        for pkg in ["jq", "hx"] {
-            let args = moss(&format!("search {pkg}"));
-            let provider = determine_provider(&args).unwrap();
-            assert_eq!(provider.kind, dependency::Kind::PackageName);
+    fn test_keyword_exact_name() {
+        let output = test_handle("search jq");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["jq"]);
+    }
+
+    #[test]
+    fn test_keyword_shell_matches_case_insensitively() {
+        // Keyword search is case-insensitive so all three casings return the same results
+        for keyword in ["shell", "Shell", "SHELL"] {
+            let output = test_handle(&format!("search {keyword}"));
+            let names = collect_result_names(&output);
+            assert_eq!(names, vec!["bash", "fish", "zsh"]);
         }
     }
 
     #[test]
-    fn test_search_with_kind() {
-        for pkg in ["jq", "hx"] {
-            let args = moss(&format!("search --provides=binary {pkg}"));
-            let provider = determine_provider(&args).unwrap();
-            assert_eq!(provider.kind, dependency::Kind::Binary);
+    fn test_keyword_summary_match() {
+        // "json" appears in jq's summary but not its name
+        let output = test_handle("search json");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["jq"]);
+    }
+
+    #[test]
+    fn test_keyword_text_matches_multiple() {
+        // "text" matches:
+        //   helix ("text editor")
+        //   nano ("GNU Text Editor")
+        //   ripgrep ("text search")
+        let output = test_handle("search text");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["helix", "nano", "ripgrep"]);
+    }
+
+    /// TODO: `moss search` could eventually provide results on binary names by default
+    #[test]
+    fn test_keyword_binary_name_returns_nothing() {
+        for query in ["search hx", "search rg"] {
+            let output = test_handle(query);
+            assert!(output.values().all(Vec::is_empty));
         }
     }
 
     #[test]
-    fn test_search_with_provider_syntax() {
-        for pkg in ["jq", "hx"] {
-            let args = moss(&format!("search binary({pkg})"));
-            let provider = determine_provider(&args).unwrap();
-            assert_eq!(provider.kind, dependency::Kind::Binary);
-        }
+    fn test_keyword_nonexistent_returns_nothing() {
+        let output = test_handle("search no-such-package");
+        assert!(output.values().all(Vec::is_empty));
+    }
+
+    #[test]
+    fn test_keyword_uppercase_matches_case_insensitively() {
+        let output = test_handle("search NANO");
+        let names = collect_result_names(&output);
+        assert_eq!(names, vec!["nano"]);
+    }
+
+    #[test]
+    fn test_provider_binary_hx_finds_helix() {
+        let output_provides_flag = test_handle("search --provides=binary hx");
+        let output_dependency_syntax = test_handle("search binary(hx)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["helix"]);
+    }
+
+    #[test]
+    fn test_provider_binary_rg_finds_ripgrep() {
+        let output_provides_flag = test_handle("search --provides=binary rg");
+        let output_dependency_syntax = test_handle("search binary(rg)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["ripgrep"]);
+    }
+
+    #[test]
+    fn test_provider_binary_jq_finds_jq() {
+        let output_provides_flag = test_handle("search --provides=binary jq");
+        let output_dependency_syntax = test_handle("search binary(jq)");
+
+        let names_provides_flag = collect_result_names(&output_provides_flag);
+        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
+
+        assert_eq!(names_provides_flag, names_dependency_syntax);
+        assert_eq!(names_provides_flag, vec!["jq"]);
     }
 }
