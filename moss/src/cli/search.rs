@@ -253,54 +253,126 @@ mod tests {
         }
     }
 
+    fn provider(kind: dependency::Kind, name: &str) -> Provider {
+        Provider {
+            kind,
+            name: name.to_owned(),
+        }
+    }
+
+    /// Build a test registry populated with real packages from the AerynOS recipes.
+    /// Package names, summaries, and provider metadata are sourced from stone.yaml
+    /// and manifest.x86_64.jsonc files in the recipes repository.
     fn test_registry() -> Registry {
         let mut registry = Registry::default();
+        let package_name = dependency::Kind::PackageName;
+        let binary = dependency::Kind::Binary;
 
-        let jq = pkg(
-            "jq",
-            "Command-line JSON processor",
-            BTreeSet::from([
-                Provider {
-                    kind: dependency::Kind::PackageName,
-                    name: "jq".to_owned(),
-                },
-                Provider {
-                    kind: dependency::Kind::Binary,
-                    name: "jq".to_owned(),
-                },
-            ]),
-        );
+        let packages = vec![
+            pkg(
+                "git",
+                "Fast, scalable, distributed revision control system",
+                BTreeSet::from([provider(package_name, "git"), provider(binary, "git")]),
+            ),
+            pkg(
+                "jq",
+                "Command-line JSON processor",
+                BTreeSet::from([provider(package_name, "jq"), provider(binary, "jq")]),
+            ),
+            pkg(
+                "ripgrep",
+                "Recursive text search utility",
+                BTreeSet::from([provider(package_name, "ripgrep"), provider(binary, "rg")]),
+            ),
+            pkg(
+                "fd",
+                "A simple, fast and user-friendly alternative to find",
+                BTreeSet::from([provider(package_name, "fd"), provider(binary, "fd")]),
+            ),
+            pkg(
+                "nano",
+                "GNU Text Editor",
+                BTreeSet::from([
+                    provider(package_name, "nano"),
+                    provider(binary, "nano"),
+                    provider(binary, "rnano"),
+                ]),
+            ),
+            pkg(
+                "helix",
+                "A post-modern text editor",
+                BTreeSet::from([provider(package_name, "helix"), provider(binary, "hx")]),
+            ),
+            pkg(
+                "bash",
+                "GNU Bourne-Again Shell",
+                BTreeSet::from([provider(package_name, "bash"), provider(binary, "bash")]),
+            ),
+            pkg(
+                "zsh",
+                "Extensible shell designed for interactive use",
+                BTreeSet::from([provider(package_name, "zsh"), provider(binary, "zsh")]),
+            ),
+            pkg(
+                "fish",
+                "The friendly interactive shell",
+                BTreeSet::from([provider(package_name, "fish"), provider(binary, "fish")]),
+            ),
+        ];
 
-        let helix = pkg(
-            "helix",
-            "A post-modern text editor",
-            BTreeSet::from([
-                Provider {
-                    kind: dependency::Kind::PackageName,
-                    name: "helix".to_owned(),
-                },
-                Provider {
-                    kind: dependency::Kind::Binary,
-                    name: "hx".to_owned(),
-                },
-            ]),
-        );
-
-        registry.add_plugin(plugin::Plugin::Test(plugin::Test::new(1, vec![jq, helix])));
+        registry.add_plugin(plugin::Plugin::Test(plugin::Test::new(1, packages)));
         registry
     }
 
-    static TEST_CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
+    struct TestFixture {
+        _root: tempfile::TempDir,
+        client: Client,
+    }
+
+    static TEST_FIXTURE: LazyLock<TestFixture> = LazyLock::new(|| {
         let root = tempfile::tempdir().unwrap();
         let installation = Installation::open(root.path(), None).unwrap();
         let registry = test_registry();
-        Client::mocked(installation, registry).ok()
+        let client = Client::mocked(installation, registry).unwrap();
+        TestFixture { _root: root, client }
     });
+
+    fn client() -> &'static Client {
+        &TEST_FIXTURE.client
+    }
+
+    fn flags_available() -> package::Flags {
+        package::Flags::default().with_available()
+    }
+
+    fn collect_result_names(results: &BTreeMap<MatchKind, Vec<Output>>) -> Vec<String> {
+        results
+            .values()
+            .flat_map(|outputs| outputs.iter().map(|output| output.name.as_str().to_owned()))
+            .collect()
+    }
+
+    fn names_for(results: &BTreeMap<MatchKind, Vec<Output>>, kind: &MatchKind) -> Vec<String> {
+        results
+            .get(kind)
+            .map(|outputs| outputs.iter().map(|o| o.name.as_str().to_owned()).collect())
+            .unwrap_or_default()
+    }
+
+    fn moss(args: &str) -> ArgMatches {
+        command().get_matches_from(args.split_whitespace())
+    }
+
+    fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
+        let args = moss(query);
+        let provider = determine_provider(&args).unwrap();
+        query_packages(client(), flags_available(), provider)
+    }
 
     #[test]
     fn test_search() {
         for pkg in ["jq", "hx"] {
-            let args = command().try_get_matches_from(["search", pkg]).unwrap();
+            let args = moss(&format!("search {pkg}"));
             let provider = determine_provider(&args).unwrap();
             assert_eq!(provider.kind, dependency::Kind::PackageName);
         }
@@ -309,9 +381,7 @@ mod tests {
     #[test]
     fn test_search_with_kind() {
         for pkg in ["jq", "hx"] {
-            let args = command()
-                .try_get_matches_from(["search", "--provides=binary", pkg])
-                .unwrap();
+            let args = moss(&format!("search --provides=binary {pkg}"));
             let provider = determine_provider(&args).unwrap();
             assert_eq!(provider.kind, dependency::Kind::Binary);
         }
@@ -320,9 +390,7 @@ mod tests {
     #[test]
     fn test_search_with_provider_syntax() {
         for pkg in ["jq", "hx"] {
-            let args = command()
-                .try_get_matches_from(["search", format!("binary({pkg})").as_str()])
-                .unwrap();
+            let args = moss(&format!("search binary({pkg})"));
             let provider = determine_provider(&args).unwrap();
             assert_eq!(provider.kind, dependency::Kind::Binary);
         }
