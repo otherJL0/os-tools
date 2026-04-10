@@ -88,6 +88,16 @@ fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
         })
 }
 
+fn query_packages(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
+    match provider {
+        Provider {
+            kind: dependency::Kind::PackageName,
+            name,
+        } => search_packages(client, flags, &name),
+        _ => search_by_provider(client, flags, provider),
+    }
+}
+
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let only_installed = args.get_flag(FLAG_INSTALLED);
     let provider = determine_provider(args)?;
@@ -99,16 +109,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let mut output = match provider {
-        Provider {
-            kind: dependency::Kind::PackageName,
-            name,
-        } => search_packages(&client, flags, &name),
-        Provider {
-            kind: _kind,
-            name: ref _name,
-        } => provides_package(&client, flags, provider),
-    }?;
+    let mut output = query_packages(&client, flags, provider);
 
     if output.values().all(|pkgs| pkgs.is_empty()) {
         return Ok(());
@@ -123,38 +124,29 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     Ok(())
 }
 
-fn search_packages(
-    client: &Client,
-    flags: package::Flags,
-    keyword: &str,
-) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
-    let mut output_kind: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
+fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTreeMap<MatchKind, Vec<Output>> {
+    let mut results: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
 
+    let keyword_lowercase = keyword.to_ascii_lowercase();
     for pkg in client.search_packages(keyword, flags) {
         let pkg_name_lowercase = pkg.meta.name.as_str().to_ascii_lowercase();
-        let match_kind = if pkg_name_lowercase.contains(&keyword.to_ascii_lowercase()) {
+        let match_kind = if pkg_name_lowercase.contains(&keyword_lowercase) {
             MatchKind::Name
         } else {
             MatchKind::Summary
         };
-        output_kind.entry(match_kind).or_default().push(Output {
+        results.entry(match_kind).or_default().push(Output {
             name: pkg.meta.name,
             summary: pkg.meta.summary,
             search_match: Some(keyword.to_owned()),
         });
     }
-    Ok(output_kind)
+    results
 }
 
-fn provides_package(
-    client: &Client,
-    flags: package::Flags,
-    provider: Provider,
-) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
-    let mut result: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
+fn search_by_provider(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
     let packages = client.lookup_packages_by_provider(&provider, flags);
-    result.insert(MatchKind::Name, packages.into_iter().map(Output::from).collect());
-    Ok(result)
+    BTreeMap::from([(MatchKind::Name, packages.into_iter().map(Output::from).collect())])
 }
 
 #[derive(Debug, thiserror::Error)]
