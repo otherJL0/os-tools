@@ -111,15 +111,15 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let mut output = query_packages(&client, flags, provider);
+    let output = query_packages(&client, flags, provider);
 
     if output.values().all(Vec::is_empty) {
         return Ok(());
     }
 
-    for (match_kind, value) in output.iter_mut() {
+    for mut value in output.into_values() {
         value.sort();
-        print_columns(value, 1);
+        print_columns(&value, 1);
     }
 
     Ok(())
