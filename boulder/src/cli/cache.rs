@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: 2026 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{io, path::PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use clap::{Args, Parser};
 use container::Container;
 use humansize::BINARY;
-use moss::{Installation, util};
+use moss::util;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use thiserror::Error;
 use walkdir::WalkDir;
@@ -55,13 +58,14 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
 }
 
 fn clean(env: Env, boulder_cache: bool, moss_cache: bool) -> Result<(), Error> {
-    let installation = Installation::open(&env.moss_dir, None)?;
-
     for (name, path) in selected_caches(&env, boulder_cache, moss_cache) {
+        let tmpdir = tempfile::tempdir()?;
+
         println!("Deleting {name} directory: {}", path.display());
-        Container::new(&installation.root)
-            .bind_rw(&path, &path)
-            .run(|| util::par_remove_dir_all(&path))?;
+
+        Container::new(tmpdir.path())
+            .bind_rw(&path, Path::new("/remove"))
+            .run(|| util::par_remove_dir_all(Path::new("/remove")))?;
     }
     Ok(())
 }
