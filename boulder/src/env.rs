@@ -79,7 +79,7 @@ fn resolve_data_dir(is_root: bool, custom: Option<PathBuf>) -> Result<PathBuf, E
 
 fn resolve_moss_root(is_root: bool, custom: Option<PathBuf>) -> Result<PathBuf, Error> {
     if let Some(dir) = custom {
-        if dir == Path::new("/.moss") {
+        if dir == Path::new("/") {
             Err(Error::MossSystemRoot)
         } else {
             Ok(dir)
@@ -118,11 +118,11 @@ mod test {
     #[test]
     fn reject_moss_system_root() {
         assert!(matches!(
-            resolve_moss_root(false, Some(PathBuf::from("/.moss"))),
+            resolve_moss_root(false, Some(PathBuf::from("/"))),
             Err(Error::MossSystemRoot)
         ));
         assert!(matches!(
-            resolve_moss_root(true, Some(PathBuf::from("/.moss"))),
+            resolve_moss_root(true, Some(PathBuf::from("/"))),
             Err(Error::MossSystemRoot)
         ));
     }

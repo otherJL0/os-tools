@@ -32,6 +32,7 @@ glob.workspace = true
 fs-err.workspace = true
 futures-util.workspace = true
 hex.workspace = true
+humansize.workspace = true
 itertools.workspace = true
 nix.workspace = true
 path-clean.workspace = true
