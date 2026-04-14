@@ -118,7 +118,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     }
 
     for (match_kind, value) in output.iter_mut() {
-        println!("Matched field: {match_kind}");
         value.sort();
         print_columns(value, 1);
     }
@@ -188,7 +187,7 @@ impl ColumnDisplay for Output {
             let (summary_prefix, summary_matched, summary_suffix) = highlight_string(&self.summary, expression);
             let _ = write!(
                 writer,
-                " {}{}{}{:width$}  {}{}{}",
+                "{}{}{}{:width$}  {}{}{}",
                 name_prefix.bold(),
                 name_matched.bold().green(),
                 name_suffix.bold(),
@@ -200,7 +199,7 @@ impl ColumnDisplay for Output {
         } else {
             let _ = write!(
                 writer,
-                " {}{:width$}  {}",
+                "{}{:width$}  {}",
                 self.name.as_str().bold(),
                 " ".repeat(width),
                 self.summary
