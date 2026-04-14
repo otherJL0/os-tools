@@ -22,7 +22,7 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use tracing::info;
-use tui::{ProgressBar, ProgressStyle};
+use tui::{ProgressBar, ProgressStyle, Styled};
 use tui::{
     dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
@@ -213,29 +213,7 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -
         "Removing stale archive trees"
     );
 
-    let progressbar = ProgressBar::new(archive_paths.len() as u64)
-        .with_style(ProgressStyle::with_template("\n|{bar:20.cyan/blue}| {pos}/{len}").unwrap());
-
-    let counter = Arc::new(AtomicUsize::new(0));
-    util::par_remove_dirs_all(
-        archive_paths.iter().map(|p| p.as_path()).collect(),
-        |path, res| match res {
-            Ok(_) => {
-                counter.fetch_add(1, Ordering::Relaxed);
-                let cnt = counter.load(Ordering::Relaxed);
-                info!(
-                    progress = cnt as f32 / archive_paths.len() as f32,
-                    current = cnt,
-                    total = archive_paths.len(),
-                    event_type = "progress_update",
-                    "Removed archived state: {:?}",
-                    path
-                );
-                progressbar.inc(1);
-            }
-            Err(e) => eprintln!("Failed to remove archived state: {path:?} ({e})"),
-        },
-    )?;
+    remove_archived_states(&archive_paths)?;
 
     timing.prune_archives = instant.elapsed();
     info!(
@@ -474,6 +452,40 @@ fn remove_empty_dirs(starting: &Path, root: &Path) -> io::Result<()> {
             current = Some(parent);
         }
     }
+
+    Ok(())
+}
+
+fn remove_archived_states(archive_paths: &[PathBuf]) -> Result<(), Error> {
+    println!();
+
+    let progressbar = ProgressBar::new(archive_paths.len() as u64).with_style(
+        ProgressStyle::with_template("\n|{bar:20.cyan/blue}| {pos}/{len}")
+            .unwrap()
+            .progress_chars("■= "),
+    );
+    progressbar.tick();
+
+    let counter = Arc::new(AtomicUsize::new(0));
+
+    util::par_remove_dirs_all(archive_paths, |path, res| match res {
+        Ok(_) => {
+            let cnt = counter.fetch_add(1, Ordering::Relaxed) + 1;
+            info!(
+                progress = cnt as f32 / archive_paths.len() as f32,
+                current = cnt,
+                total = archive_paths.len(),
+                event_type = "progress_update",
+                "Removed archived state: {:?}",
+                path
+            );
+            progressbar.inc(1);
+            progressbar.suspend(|| println!("{} {path:?}", "Removed".green()));
+        }
+        Err(e) => eprintln!("Failed to remove archived state: {path:?} ({e})"),
+    })?;
+
+    progressbar.finish_and_clear();
 
     Ok(())
 }

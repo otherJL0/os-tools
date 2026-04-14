@@ -208,15 +208,15 @@ pub fn par_remove_dir_all(path: &Path) -> io::Result<()> {
 ///
 /// Provides a callback tuple of `Path` and `io::Result` once each element in paths is completed with it's
 /// result
-pub fn par_remove_dirs_all<P>(paths: Vec<&Path>, progress: P) -> io::Result<()>
+pub fn par_remove_dirs_all<P>(paths: &[PathBuf], progress: P) -> io::Result<()>
 where
     P: Fn(&Path, &io::Result<()>) + Sync,
 {
     let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
 
     rayon_runtime.install(|| -> io::Result<()> {
-        paths.par_iter().try_for_each(|path| -> io::Result<()> {
-            let result: io::Result<()> = (|| {
+        paths.par_iter().try_for_each(|path| {
+            let result = (|| {
                 let filetype = match fs::symlink_metadata(path) {
                     Ok(metadata) => metadata.file_type(),
                     Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
