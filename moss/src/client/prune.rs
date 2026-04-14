@@ -8,6 +8,9 @@
 //! and assets on disk by way of refcounting.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 use std::{
     io,
     path::{Path, PathBuf},
@@ -17,12 +20,15 @@ use fs_err as fs;
 use itertools::Itertools;
 use thiserror::Error;
 
+use tracing::info;
+use tui::{ProgressBar, ProgressStyle, Styled};
 use tui::{
     dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
 };
 
 use crate::client::boot;
+use crate::util;
 use crate::{Client, Installation, State, client::cache, db, package, repository, state};
 
 /// The prune strategy for removing old states
@@ -41,6 +47,9 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -
     let layout_db = &client.layout_db;
     let state_db = &client.state_db;
     let install_db = &client.install_db;
+
+    let mut timing = Timing::default();
+    let mut instant = Instant::now();
 
     // Only prune if the moss root has an active state (otherwise
     // it's probably borked or not setup yet)
@@ -127,6 +136,15 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -
         .filter_map(|(pkg, count)| (count == 0).then_some(pkg))
         .collect::<Vec<_>>();
 
+    timing.resolve = instant.elapsed();
+    info!(
+        total_resolved_states = removals.len(),
+        total_resolved_packages = package_removals.len(),
+        resolve_time_ms = timing.resolve.as_millis(),
+        "Resolved states marked for removal"
+    );
+    instant = Instant::now();
+
     // Print out the states to be removed to the user
     println!("The following state(s) will be removed:");
     println!();
@@ -148,6 +166,13 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -
     // Prune these states / packages from all dbs
     prune_databases(&removals, &package_removals, state_db, install_db, layout_db)?;
 
+    timing.prune_db = instant.elapsed();
+    info!(
+        prune_db_time_ms = timing.prune_db.as_millis(),
+        "Pruned stale packages & states from databases"
+    );
+    instant = Instant::now();
+
     // Remove orphaned downloads
     remove_orphaned_files(
         // root
@@ -168,14 +193,34 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -
         |hash| Some(cache::asset_path(installation, &hash)),
     )?;
 
-    // Remove each state's archive folder
-    for state in removals {
-        let archive_path = installation.root_path(state.id.to_string());
+    timing.orphaned_files = instant.elapsed();
+    info!(
+        orphaned_file_time_ms = timing.orphaned_files.as_millis(),
+        "Removed orphaned files"
+    );
+    instant = Instant::now();
 
-        if archive_path.exists() {
-            fs::remove_dir_all(&archive_path)?;
-        }
-    }
+    let archive_paths = removals
+        .iter()
+        .map(|s| installation.root_path(s.id.to_string()))
+        .collect::<Vec<_>>();
+
+    info!(
+        total_archived_paths = archive_paths.len(),
+        progress = 0.0,
+        event_type = "progress_start",
+        "Removing stale archive trees"
+    );
+
+    remove_archived_states(&archive_paths)?;
+
+    timing.prune_archives = instant.elapsed();
+    info!(
+        duration_ms = timing.prune_archives.as_millis(),
+        items_processed = archive_paths.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
 
     // Sync boot to ensure pruned states are removed from boot entries
     boot::synchronize(client, &current_state).map_err(Error::SyncBoot)?;
@@ -408,6 +453,49 @@ fn remove_empty_dirs(starting: &Path, root: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn remove_archived_states(archive_paths: &[PathBuf]) -> Result<(), Error> {
+    println!();
+
+    let progressbar = ProgressBar::new(archive_paths.len() as u64).with_style(
+        ProgressStyle::with_template("\n|{bar:20.cyan/blue}| {pos}/{len}")
+            .unwrap()
+            .progress_chars("■= "),
+    );
+    progressbar.tick();
+
+    let counter = Arc::new(AtomicUsize::new(0));
+
+    util::par_remove_dirs_all(archive_paths, |path, res| match res {
+        Ok(_) => {
+            let cnt = counter.fetch_add(1, Ordering::Relaxed) + 1;
+            info!(
+                progress = cnt as f32 / archive_paths.len() as f32,
+                current = cnt,
+                total = archive_paths.len(),
+                event_type = "progress_update",
+                "Removed archived state: {:?}",
+                path
+            );
+            progressbar.inc(1);
+            progressbar.suspend(|| println!("{} {path:?}", "Removed".green()));
+        }
+        Err(e) => eprintln!("Failed to remove archived state: {path:?} ({e})"),
+    })?;
+
+    progressbar.finish_and_clear();
+
+    Ok(())
+}
+
+/// Simple timing information for Prune
+#[derive(Default)]
+pub struct Timing {
+    pub resolve: Duration,
+    pub prune_db: Duration,
+    pub orphaned_files: Duration,
+    pub prune_archives: Duration,
 }
 
 #[derive(Debug, Error)]
