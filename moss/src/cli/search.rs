@@ -111,16 +111,15 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let mut output = query_packages(&client, flags, provider);
+    let output = query_packages(&client, flags, provider);
 
     if output.values().all(Vec::is_empty) {
         return Ok(());
     }
 
-    for (match_kind, value) in output.iter_mut() {
-        println!("Matched field: {match_kind}");
+    for mut value in output.into_values() {
         value.sort();
-        print_columns(value, 1);
+        print_columns(&value, 1);
     }
 
     Ok(())
@@ -188,7 +187,7 @@ impl ColumnDisplay for Output {
             let (summary_prefix, summary_matched, summary_suffix) = highlight_string(&self.summary, expression);
             let _ = write!(
                 writer,
-                " {}{}{}{:width$}  {}{}{}",
+                "{}{}{}{:width$}  {}{}{}",
                 name_prefix.bold(),
                 name_matched.bold().green(),
                 name_suffix.bold(),
@@ -200,7 +199,7 @@ impl ColumnDisplay for Output {
         } else {
             let _ = write!(
                 writer,
-                " {}{:width$}  {}",
+                "{}{:width$}  {}",
                 self.name.as_str().bold(),
                 " ".repeat(width),
                 self.summary
