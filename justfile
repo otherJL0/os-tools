@@ -67,7 +67,7 @@ fix:
   @echo "Applying cargo fmt…"
   cargo fmt --all
   @echo "Fixing typos…"
-  typos -w
+  typos -w --exclude license-list-data/
 
 # Run lints
 lint:
