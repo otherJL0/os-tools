@@ -76,7 +76,7 @@ lint:
   @echo "Running cargo fmt…"
   cargo fmt --all -- --check
   @echo "Checking for typos…"
-  typos
+  typos --exclude license-list-data/
 
 # Run tests
 test: lint
