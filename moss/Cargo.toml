@@ -58,6 +58,8 @@ zbus.workspace = true
 astr = { workspace = true, features = ["diesel"] }
 
 [dev-dependencies]
+moss = { path = ".", features = ["testing"] }
+
 tempfile.workspace = true
 
 [package.metadata.cargo-machete]
