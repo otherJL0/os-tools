@@ -81,7 +81,7 @@ lint:
 # Run tests
 test: lint
   @echo "Running tests in all packages…"
-  cargo test --all --features moss/testing
+  cargo test --all
 
 # Run all DB migrations
 migrate: (diesel "meta" "migration run") (diesel "layout" "migration run") (diesel "state" "migration run")

@@ -2070,6 +2070,7 @@ dependencies = [
  "kdl",
  "libsqlite3-sys",
  "log",
+ "moss",
  "nix 0.27.1",
  "os-info",
  "rayon",
