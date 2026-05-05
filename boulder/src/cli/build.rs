@@ -122,8 +122,8 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
             }
             Err(e) => {
                 println!("└─ unable to change boulder thread scheduling priority to SCHED_BATCH.");
-                println!("   └─ '{e:?}'");
-                println!("   └─ ignoring inconsequential error.\n");
+                println!("└─ error message: {e:?}'");
+                println!("└─ priority left at its default value.\n");
             }
         }
         println!("Continuing build:\n");
