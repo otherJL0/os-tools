@@ -76,18 +76,16 @@ fn map_aliases(value: &str) -> &str {
 
 fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+    let mut provider = Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))?;
+
     let provides_flag = args
         .get_one::<String>(FLAG_PROVIDES)
         .map(|s| map_aliases(s))
         .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
     if let Some(kind) = provides_flag {
-        Ok(Provider {
-            kind,
-            name: keyword.to_owned(),
-        })
-    } else {
-        Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))
+        provider.kind = kind;
     }
+    Ok(provider)
 }
 
 fn query_packages(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
