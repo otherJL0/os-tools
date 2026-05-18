@@ -74,14 +74,9 @@ fn map_aliases(value: &str) -> &str {
     }
 }
 
-fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
-    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+fn determine_provider(keyword: &str, provides_flag: Option<dependency::Kind>) -> Result<Provider, Error> {
     let mut provider = Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))?;
 
-    let provides_flag = args
-        .get_one::<String>(FLAG_PROVIDES)
-        .map(|s| map_aliases(s))
-        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
     if let Some(kind) = provides_flag {
         provider.kind = kind;
     }
@@ -100,8 +95,11 @@ fn query_packages(client: &Client, flags: package::Flags, provider: Provider) ->
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provider = determine_provider(args)?;
-
+    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+    let provides_flag = args
+        .get_one::<String>(FLAG_PROVIDES)
+        .map(|s| map_aliases(s))
+        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
     let client = Client::new(environment::NAME, installation)?;
     let flags = if only_installed {
         package::Flags::new().with_installed()
@@ -339,7 +337,12 @@ mod tests {
     /// Test helper function that approximates the behavior of `handle()`
     fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
         let args = moss(query);
-        let provider = determine_provider(&args).unwrap();
+        let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+        let provides_flag = args
+            .get_one::<String>(FLAG_PROVIDES)
+            .map(|s| map_aliases(s))
+            .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
+        let provider = determine_provider(keyword, provides_flag).unwrap();
         query_packages(client(), flags_available(), provider)
     }
 
