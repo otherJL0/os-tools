@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Arg, ArgMatches, Command};
 
+use crate::cli::search_file;
 use moss::client;
 use moss::dependency;
 use moss::package::{self, Name};
@@ -101,6 +102,13 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         .map(|s| map_aliases(s))
         .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
     let client = Client::new(environment::NAME, installation)?;
+
+    if keyword.contains('/') {
+        return search_file::search_file(keyword.to_owned(), client).map_err(|_| Error::ParseError(keyword.to_owned()));
+    }
+
+    let provider = determine_provider(&keyword, provides_flag)?;
+
     let flags = if only_installed {
         package::Flags::new().with_installed()
     } else {
