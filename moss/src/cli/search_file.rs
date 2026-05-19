@@ -58,6 +58,11 @@ pub fn search_file(mut keyword: String, client: Client) -> Result<(), Error> {
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keyword = String::from(args.get_one::<String>(ARG_KEYWORD).unwrap());
+    eprintln!(
+        "{} is deprecated, use {} instead",
+        " moss search-file".bold().yellow(),
+        format!("moss search {keyword}").bold().yellow(),
+    );
 
     let client = Client::new(environment::NAME, installation)?;
 
