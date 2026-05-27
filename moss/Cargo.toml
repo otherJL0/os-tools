@@ -59,6 +59,7 @@ astr = { workspace = true, features = ["diesel"] }
 
 [dev-dependencies]
 moss = { path = ".", features = ["testing"] }
+rstest.workspace = true
 
 tempfile.workspace = true
 

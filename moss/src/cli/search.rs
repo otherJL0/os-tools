@@ -268,6 +268,7 @@ mod tests {
     use moss::Registry;
     use moss::package::{self, Name, Package};
     use moss::registry::plugin;
+    use rstest::rstest;
     use std::collections::BTreeSet;
     use std::sync::LazyLock;
     use stone::{StonePayloadLayoutFile, StonePayloadLayoutRecord};
@@ -420,23 +421,29 @@ mod tests {
         search_file(keyword.to_owned(), client()).unwrap()
     }
 
-    #[test]
-    fn test_keyword_exact_name() {
-        let output = test_handle("search jq");
+    #[rstest]
+    #[case::jq("jq", "jq")]
+    #[case::nano("nano", "nano")]
+    fn test_keyword_exact_name(#[case] keyword: &str, #[case] expected: &str) {
+        let output = test_handle(&format!("search {keyword}"));
         let names = collect_result_names(&output);
-        assert_eq!(names, vec!["jq"]);
+        assert_eq!(names, vec![expected]);
     }
 
-    #[test]
-    fn test_keyword_shell_matches_case_insensitively() {
-        // Keyword search is case-insensitive so all three casings return the same results
-        for keyword in ["shell", "Shell", "SHELL"] {
-            let output = test_handle(&format!("search {keyword}"));
-            let names = collect_result_names(&output);
-            assert_eq!(names, vec!["bash", "fish", "zsh"]);
-        }
+    #[rstest]
+    #[case::shell("shell", vec!["bash", "fish", "zsh"])]
+    #[allow(non_snake_case)]
+    #[case::Shell("Shell", vec!["bash", "fish", "zsh"])]
+    #[allow(non_snake_case)]
+    #[case::SHELL("SHELL", vec!["bash", "fish", "zsh"])]
+    #[case::nano("nano", vec!["nano"])]
+    #[allow(non_snake_case)]
+    #[case::NANO("NANO", vec!["nano"])]
+    fn test_search_keyword_case_insensitive(#[case] keyword: &str, #[case] expected: Vec<&str>) {
+        let output = test_handle(&format!("search {keyword}"));
+        let names = collect_result_names(&output);
+        assert_eq!(names, expected);
     }
-
     #[test]
     fn test_keyword_summary_match() {
         // "json" appears in jq's summary but not its name
@@ -457,94 +464,41 @@ mod tests {
     }
 
     /// TODO: `moss search` could eventually provide results on binary names by default
-    #[test]
-    fn test_keyword_binary_name_returns_nothing() {
-        for query in ["search hx", "search rg"] {
-            let output = test_handle(query);
-            assert!(output.values().all(Vec::is_empty));
-        }
-    }
-
-    #[test]
-    fn test_keyword_nonexistent_returns_nothing() {
-        let output = test_handle("search no-such-package");
+    #[rstest]
+    #[case::binary_hx("hx")]
+    #[case::binary_rg("rg")]
+    #[case::nonexistent_package("no-such-package")]
+    fn test_search_empty_return(#[case] keyword: &str) {
+        let output = test_handle(&format!("search {keyword}"));
         assert!(output.values().all(Vec::is_empty));
     }
 
-    #[test]
-    fn test_keyword_uppercase_matches_case_insensitively() {
-        let output = test_handle("search NANO");
-        let names = collect_result_names(&output);
-        assert_eq!(names, vec!["nano"]);
-    }
-
-    #[test]
-    fn test_provider_binary_hx_finds_helix() {
-        let output_provides_flag = test_handle("search --provides=binary hx");
-        let output_dependency_syntax = test_handle("search binary(hx)");
+    #[rstest]
+    #[case::binary_hx_finds_helix("binary", "hx", "helix")]
+    #[case::binary_rg_finds_ripgrep("binary", "rg", "ripgrep")]
+    #[case::binary_jq_finds_jq("binary", "jq", "jq")]
+    #[case::library_libyaml_so_finds_libyaml("soname", "libyaml-0.so.2(x86_64)", "libyaml")]
+    #[case::pkgconfig_yaml_finds_libyaml("pkgconfig", "yaml-0.1", "libyaml-devel")]
+    fn test_provider_search(#[case] provider_type: &str, #[case] keyword: &str, #[case] name: &str) {
+        let output_provides_flag = test_handle(&format!("search --provides={provider_type} {keyword}"));
+        let output_dependency_syntax = test_handle(&format!("search {provider_type}({keyword})"));
 
         let names_provides_flag = collect_result_names(&output_provides_flag);
         let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
 
         assert_eq!(names_provides_flag, names_dependency_syntax);
-        assert_eq!(names_provides_flag, vec!["helix"]);
+        assert_eq!(names_provides_flag, vec![name]);
     }
 
-    #[test]
-    fn test_provider_binary_rg_finds_ripgrep() {
-        let output_provides_flag = test_handle("search --provides=binary rg");
-        let output_dependency_syntax = test_handle("search binary(rg)");
-
-        let names_provides_flag = collect_result_names(&output_provides_flag);
-        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
-
-        assert_eq!(names_provides_flag, names_dependency_syntax);
-        assert_eq!(names_provides_flag, vec!["ripgrep"]);
-    }
-
-    #[test]
-    fn test_provider_binary_jq_finds_jq() {
-        let output_provides_flag = test_handle("search --provides=binary jq");
-        let output_dependency_syntax = test_handle("search binary(jq)");
-
-        let names_provides_flag = collect_result_names(&output_provides_flag);
-        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
-
-        assert_eq!(names_provides_flag, names_dependency_syntax);
-        assert_eq!(names_provides_flag, vec!["jq"]);
-    }
-
-    #[test]
-    fn test_provider_soname_finds_libyaml() {
-        let output_provides_flag = test_handle("search --provides=soname libyaml-0.so.2(x86_64)");
-        let output_dependency_syntax = test_handle("search soname(libyaml-0.so.2(x86_64))");
-
-        let names_provides_flag = collect_result_names(&output_provides_flag);
-        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
-
-        assert_eq!(names_provides_flag, names_dependency_syntax);
-        assert_eq!(names_provides_flag, vec!["libyaml"]);
-    }
-
-    #[test]
-    fn test_provider_pkgconfig_finds_libyaml_devel() {
-        let output_provides_flag = test_handle("search --provides=pkgconfig yaml-0.1");
-        let output_dependency_syntax = test_handle("search pkgconfig(yaml-0.1)");
-
-        let names_provides_flag = collect_result_names(&output_provides_flag);
-        let names_dependency_syntax = collect_result_names(&output_dependency_syntax);
-
-        assert_eq!(names_provides_flag, names_dependency_syntax);
-        assert_eq!(names_provides_flag, vec!["libyaml-devel"]);
-    }
-
-    #[test]
-    fn test_search_file_strips_usr_prefix() {
-        for query in ["/usr/bin/hx", "usr/bin/hx", "/bin/hx", "bin/hx"] {
-            let results = search_file_results(query);
-            assert_eq!(results.len(), 1, "expected one result for {query:?}");
-            assert_eq!(results[0].0, "/usr/bin/hx");
-        }
+    #[rstest]
+    #[case::full_root_path("/usr/bin/hx")]
+    #[case::partial_root_path("usr/bin/hx")]
+    #[case::full_usr_path("/bin/hx")]
+    #[case::partial_usr_path("bin/hx")]
+    fn test_search_file(#[case] keyword: &str) {
+        let results = search_file_results(keyword);
+        assert_eq!(results.len(), 1, "expected one result for {keyword:?}");
+        assert_eq!(results[0].0, "/usr/bin/hx");
     }
 
     #[test]
