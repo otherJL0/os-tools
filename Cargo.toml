@@ -65,6 +65,7 @@ nix = { version = "0.27.1", features = [
 os-info = { git = "https://github.com/AerynOS/os-info", rev = "26b39c1d49c3b4f30d778729fb56958824c069de" }
 path-clean = "1.0.1"
 petgraph = "0.8.2"
+proptest = "1.11.0"
 rayon = "1.10.0"
 regex = "1.10.5"
 reqwest = { version = "0.13.2", default-features = false, features = [
