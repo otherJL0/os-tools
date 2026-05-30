@@ -305,22 +305,53 @@ impl Ord for Pattern {
 #[cfg(test)]
 pub mod path_tests {
     use super::Pattern;
+    use proptest::prelude::*;
 
-    /// test me
-    #[test]
-    fn test_pattern() {
-        let k = "/usr/lib/modules/(version:*)/*".parse::<Pattern>().unwrap();
+    prop_compose! {
+        /// This is slightly more readable than the alternative regular expression:
+        /// [0-9]{1,4}(\\.[0-9]{1,4}(\\.[0-9]{1,4}(-[0-9]{1,4})?)?)?(\\.kvm)?
+        fn generate_version()(
+            major in "[0-9]{1, 4}",
+            minor in prop::option::of("[0-9]{1, 4}"),
+            patch in prop::option::of("[0-9]{1, 4}"),
+            build in prop::option::of("[0-9]{1, 4}"),
+            kvm in any::<bool>(),
+        ) -> String{
+            let mut version = major;
+            if let Some(m) = minor {
+                version.push('.');
+                version.push_str(&m);
+                if let Some(p) = patch {
+                    version.push('.');
+                    version.push_str(&p);
+                    if let Some(b) = build {
+                        version.push('-');
+                        version.push_str(&b);
+                    }
+                }
+            }
+            if kvm {
+                version.push_str(".kvm");
+            }
 
-        let good = k.match_path("/usr/lib/modules/6.2.6/modules.symbols");
-        assert!(good.is_some());
-        let m = good.unwrap();
-        assert_eq!(m.path, "/usr/lib/modules/6.2.6/modules.symbols");
-        let version = m.variables.get("version");
-        assert!(version.is_some());
-        assert_eq!(version.unwrap(), "6.2.6");
+            version
+        }
+    }
 
-        let wide = k.match_path("/usr/lib/modules/6.6.67-51.kvm/kernel/net/netfilter/nft_hash.ko.zst");
-        assert!(wide.is_none());
+    proptest! {
+        #[test]
+        fn test_pattern(generated_version in generate_version()) {
+            let k = "/usr/lib/modules/(version:*)/*".parse::<Pattern>().unwrap();
+
+            let path = format!("/usr/lib/modules/{generated_version}/modules.symbols");
+            let good = k.match_path(&path);
+            prop_assert!(good.is_some());
+            let m = good.unwrap();
+            prop_assert_eq!(m.path, path);
+            let version = m.variables.get("version");
+            prop_assert!(version.is_some());
+            prop_assert_eq!(version.unwrap(), &generated_version);
+        }
     }
 
     #[test]
