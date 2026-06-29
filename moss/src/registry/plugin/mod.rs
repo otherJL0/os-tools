@@ -72,6 +72,17 @@ impl Plugin {
         })
     }
 
+    pub fn query_prefix(&self, prefix: &str, flags: package::Flags) -> Vec<package::Name> {
+        match self {
+            Plugin::Active(plugin) => plugin.query_prefix(prefix, flags),
+            Plugin::Cobble(plugin) => plugin.query_prefix(prefix, flags),
+            Plugin::Repository(plugin) => plugin.query_prefix(prefix, flags),
+
+            #[cfg(any(test, feature = "testing"))]
+            Plugin::Test(plugin) => vec![],
+        }
+    }
+
     /// Returns a list of packages with matching `provider` and `flags`
     pub fn query_provider(&self, provider: &Provider, flags: package::Flags) -> package::Sorted<Vec<Package>> {
         package::Sorted::new(match self {

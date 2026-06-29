@@ -27,6 +27,7 @@ pub enum Filter<'a> {
     Dependency(Dependency),
     Name(package::Name),
     Keyword(&'a str),
+    Prefix(&'a str),
     All,
 }
 
@@ -70,6 +71,43 @@ impl Database {
         })
     }
 
+    pub fn query_name_only(&self, filter: Filter<'_>) -> Result<Vec<package::Name>, Error> {
+        self.conn.exec(|conn| {
+            let (where_, param) = match &filter {
+                Filter::Provider(provider) => (
+                    "WHERE package IN (SELECT package FROM meta_providers WHERE provider = ?)",
+                    Some(provider.to_string()),
+                ),
+                Filter::Dependency(dependency) => (
+                    "WHERE package IN (SELECT package FROM meta_dependencies WHERE dependency = ?)",
+                    Some(dependency.to_string()),
+                ),
+
+                // These filters operate directly on the meta table,
+                // so they use the WHERE clause.
+                Filter::Name(name) => ("WHERE name = ?", Some(name.to_string())),
+                Filter::Keyword(keyword) => (
+                    "WHERE name LIKE concat('%', ?1, '%') OR summary LIKE concat('%', ?1, '%')",
+                    Some(keyword.to_string()),
+                ),
+                Filter::Prefix(prefix) => ("WHERE name LIKE concat(?1, '%')", Some(prefix.to_string())),
+
+                Filter::All => ("", None),
+            };
+
+            let query = format!("SELECT DISTINCT name FROM meta {where_} ORDER BY name");
+
+            let mut stmt = conn.prepare(&query)?;
+            let mut rows = stmt.query(rusqlite::params_from_iter(param.iter()))?;
+
+            let mut metas = Vec::new();
+            while let Some(row) = rows.next()? {
+                metas.push(row.get::<_, String>(0)?.into());
+            }
+            Ok(metas)
+        })
+    }
+
     pub fn query(&self, filter: Filter<'_>) -> Result<Vec<(package::Id, Meta)>, Error> {
         self.conn.exec(|conn| {
             let (where_, having, params) = match &filter {
@@ -86,6 +124,7 @@ impl Database {
                     "",
                     [keyword.to_string()],
                 ),
+                Filter::Prefix(prefix) => ("WHERE name LIKE concat(?1, '%')", "", [prefix.to_string()]),
 
                 Filter::All => ("", "", ["".to_owned()]),
             };

@@ -74,12 +74,31 @@ impl Repository {
         }
     }
 
+    fn query_name_only(&self, flags: package::Flags, filter: db::meta::Filter<'_>) -> Vec<package::Name> {
+        if flags.available || flags == package::Flags::default() {
+            // TODO: Error handling
+            match self.active.db.query_name_only(filter) {
+                Ok(names) => names,
+                Err(error) => {
+                    warn!("failed to query repository packages: {error}");
+                    vec![]
+                }
+            }
+        } else {
+            vec![]
+        }
+    }
+
     pub fn list(&self, flags: package::Flags) -> Vec<Package> {
         self.query(flags, db::meta::Filter::All)
     }
 
     pub fn query_keyword(&self, keyword: &str, flags: package::Flags) -> Vec<Package> {
         self.query(flags, db::meta::Filter::Keyword(keyword))
+    }
+
+    pub fn query_prefix(&self, prefix: &str, flags: package::Flags) -> Vec<package::Name> {
+        self.query_name_only(flags, db::meta::Filter::Prefix(prefix))
     }
 
     /// Query all packages that match the given provider identity
