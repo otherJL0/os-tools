@@ -23,7 +23,7 @@ pub fn command() -> clap::Command {
 )]
 pub struct Command {
     /// Packages to remove
-    #[arg(add = ArgValueCompleter::new(prefix_completer(package::Flags::default().with_installed())))]
+    #[arg(add = ArgValueCompleter::new(prefix_completer("moss_remove", package::Flags::default().with_installed())))]
     packages: Vec<String>,
 
     /// Simulate the operation (dry-run)

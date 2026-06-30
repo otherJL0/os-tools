@@ -68,6 +68,11 @@ tempfile.workspace = true
 
 [dev-dependencies]
 moss = { path = ".", features = ["testing"] }
+criterion.workspace = true
+
+[[bench]]
+name = "dynamic_completion"
+harness = false
 
 tempfile.workspace = true
 

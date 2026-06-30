@@ -13,30 +13,38 @@
 #define STONE_HEADER_SIZE 32
 
 enum StoneSeekFrom
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint8_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   STONE_SEEK_FROM_START = 0,
   STONE_SEEK_FROM_CURRENT = 1,
   STONE_SEEK_FROM_END = 2,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StoneSeekFrom StoneSeekFrom;
+#else
 typedef uint8_t StoneSeekFrom;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 /**
  * Format versions are defined as u32, to allow further mangling in future
  */
 enum StoneHeaderVersion
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint32_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   STONE_HEADER_VERSION_V1 = 1,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StoneHeaderVersion StoneHeaderVersion;
+#else
 typedef uint32_t StoneHeaderVersion;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 /**
@@ -46,9 +54,9 @@ typedef uint32_t StoneHeaderVersion;
  *
  */
 enum StoneHeaderV1FileType
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint8_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   /**
    * Binary package
@@ -69,13 +77,17 @@ enum StoneHeaderV1FileType
   STONE_HEADER_V1_FILE_TYPE_UNKNOWN = 255,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StoneHeaderV1FileType StoneHeaderV1FileType;
+#else
 typedef uint8_t StoneHeaderV1FileType;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum StonePayloadKind
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint8_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   STONE_PAYLOAD_KIND_META = 1,
   STONE_PAYLOAD_KIND_CONTENT = 2,
@@ -85,20 +97,28 @@ enum StonePayloadKind
   STONE_PAYLOAD_KIND_UNKNOWN = 255,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StonePayloadKind StonePayloadKind;
+#else
 typedef uint8_t StonePayloadKind;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum StonePayloadCompression
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint8_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   STONE_PAYLOAD_COMPRESSION_NONE = 1,
   STONE_PAYLOAD_COMPRESSION_ZSTD = 2,
   STONE_PAYLOAD_COMPRESSION_UNKNOWN = 255,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StonePayloadCompression StonePayloadCompression;
+#else
 typedef uint8_t StonePayloadCompression;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 /**
@@ -106,9 +126,9 @@ typedef uint8_t StonePayloadCompression;
  * the target installation.
  */
 enum StonePayloadLayoutFileType
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint8_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   /**
    * Regular file
@@ -141,13 +161,17 @@ enum StonePayloadLayoutFileType
   STONE_PAYLOAD_LAYOUT_FILE_TYPE_UNKNOWN = 255,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StonePayloadLayoutFileType StonePayloadLayoutFileType;
+#else
 typedef uint8_t StonePayloadLayoutFileType;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum StonePayloadMetaTag
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint16_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   STONE_PAYLOAD_META_TAG_NAME = 1,
   STONE_PAYLOAD_META_TAG_ARCHITECTURE = 2,
@@ -172,13 +196,17 @@ enum StonePayloadMetaTag
   STONE_PAYLOAD_META_TAG_UNKNOWN = UINT16_MAX,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StonePayloadMetaTag StonePayloadMetaTag;
+#else
 typedef uint16_t StonePayloadMetaTag;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum StonePayloadMetaPrimitiveType
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint8_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   STONE_PAYLOAD_META_PRIMITIVE_TYPE_INT8 = 1,
   STONE_PAYLOAD_META_PRIMITIVE_TYPE_UINT8 = 2,
@@ -194,13 +222,17 @@ enum StonePayloadMetaPrimitiveType
   STONE_PAYLOAD_META_PRIMITIVE_TYPE_UNKNOWN = 255,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StonePayloadMetaPrimitiveType StonePayloadMetaPrimitiveType;
+#else
 typedef uint8_t StonePayloadMetaPrimitiveType;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum StonePayloadMetaDependency
-#ifdef __cplusplus
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint8_t
-#endif // __cplusplus
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
  {
   /**
    * Just the plain name of a package
@@ -241,7 +273,11 @@ enum StonePayloadMetaDependency
   STONE_PAYLOAD_META_DEPENDENCY_UNKNOWN = 255,
 };
 #ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum StonePayloadMetaDependency StonePayloadMetaDependency;
+#else
 typedef uint8_t StonePayloadMetaDependency;
+#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 typedef struct StonePayload StonePayload;
