@@ -1,8 +1,10 @@
+use moss::dynamic_completion::prefix_completer;
 use std::ffi::OsString;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use moss::package;
 
+#[cfg(test)]
 fn criterion_benchmark(c: &mut Criterion) {
     let prefix = OsString::from("lib");
 
@@ -14,17 +16,8 @@ fn criterion_benchmark(c: &mut Criterion) {
         &prefix,
         |b, prefix| {
             b.iter(|| {
-                let client_name = package::Flags::default().with_available();
-                move |prefix: &std::ffi::OsStr| {
-                    let Some(prefix) = prefix.to_str() else {
-                        return vec![];
-                    };
-                    if prefix.is_empty() {
-                        return vec![];
-                    }
-                    generate_results(client(client_name), flags, prefix)
-                }
-            }(prefix));
+                prefix_completer("criterion_benchmark", package::Flags::default().with_available())(prefix);
+            });
         },
     );
 }
